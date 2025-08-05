@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+CHANNEL_ID = (os.getenv("DISCORD_CHANNEL_ID"))
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
