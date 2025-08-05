@@ -5,10 +5,19 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # Lädt Variablen aus .env (lokal)
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+if not DISCORD_TOKEN:
+    raise ValueError("DISCORD_TOKEN ist nicht gesetzt! Bitte Umgebungsvariable hinzufügen.")
+
+channel_id_env = os.getenv("DISCORD_CHANNEL_ID")
+if not channel_id_env:
+    raise ValueError("DISCORD_CHANNEL_ID ist nicht gesetzt! Bitte Umgebungsvariable hinzufügen.")
+try:
+    CHANNEL_ID = int(channel_id_env)
+except ValueError:
+    raise ValueError("DISCORD_CHANNEL_ID muss eine gültige Zahl sein.")
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -23,39 +32,36 @@ def fetch_dxheat_spots():
         return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
-
     spots = []
     for row in soup.find_all('tr'):
         columns = row.find_all('td')
         if len(columns) >= 4:
-            spot = {
+            spots.append({
                 'callsign': columns[0].text.strip(),
                 'frequency': columns[1].text.strip(),
                 'time': columns[2].text.strip(),
                 'grid': columns[3].text.strip(),
-            }
-            spots.append(spot)
+            })
     return spots
 
 async def dxheat_task():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
     if channel is None:
-        print(f"Fehler: Kanal mit ID {CHANNEL_ID} nicht gefunden!")
+        print(f"Kanal mit ID {CHANNEL_ID} nicht gefunden!")
         return
 
     while not client.is_closed():
         spots = fetch_dxheat_spots()
-        if not spots:
-            print("Keine Spots gefunden oder Fehler beim Abruf.")
-        else:
+        if spots:
             for spot in spots:
-                message = f"📡 **{spot['callsign']}** spotted on {spot['frequency']} MHz at {spot['time']} UTC, grid {spot['grid']}"
+                msg = f"📡 **{spot['callsign']}** spotted on {spot['frequency']} MHz at {spot['time']} UTC, grid {spot['grid']}"
                 try:
-                    await channel.send(message)
+                    await channel.send(msg)
                 except Exception as e:
                     print(f"Fehler beim Senden der Nachricht: {e}")
-
+        else:
+            print("Keine Spots gefunden oder Abruf fehlgeschlagen.")
         await asyncio.sleep(600)  # 10 Minuten warten
 
 @client.event
