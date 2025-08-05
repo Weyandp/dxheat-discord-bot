@@ -1,23 +1,12 @@
-import os
 import discord
 import asyncio
 import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
-load_dotenv()  # Lädt Variablen aus .env (lokal)
-
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN ist nicht gesetzt! Bitte Umgebungsvariable hinzufügen.")
-
-channel_id_env = os.getenv("DISCORD_CHANNEL_ID")
-if not channel_id_env:
-    raise ValueError("DISCORD_CHANNEL_ID ist nicht gesetzt! Bitte Umgebungsvariable hinzufügen.")
-try:
-    CHANNEL_ID = int(channel_id_env)
-except ValueError:
-    raise ValueError("DISCORD_CHANNEL_ID muss eine gültige Zahl sein.")
+# --- Setze hier deinen Token und Kanal-ID ein ---
+DISCORD_TOKEN = "DEIN_DISCORD_BOT_TOKEN"
+CHANNEL_ID = 1402410255622869154  # Kanal-ID als Zahl
+# ----------------------------------------------
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -31,7 +20,9 @@ def fetch_dxheat_spots():
         print(f"Fehler beim Abrufen von DXHeat: {e}")
         return []
 
+    from bs4 import BeautifulSoup
     soup = BeautifulSoup(response.text, 'html.parser')
+
     spots = []
     for row in soup.find_all('tr'):
         columns = row.find_all('td')
@@ -55,9 +46,9 @@ async def dxheat_task():
         spots = fetch_dxheat_spots()
         if spots:
             for spot in spots:
-                msg = f"📡 **{spot['callsign']}** spotted on {spot['frequency']} MHz at {spot['time']} UTC, grid {spot['grid']}"
+                message = f"📡 **{spot['callsign']}** spotted on {spot['frequency']} MHz at {spot['time']} UTC, grid {spot['grid']}"
                 try:
-                    await channel.send(msg)
+                    await channel.send(message)
                 except Exception as e:
                     print(f"Fehler beim Senden der Nachricht: {e}")
         else:
@@ -70,3 +61,4 @@ async def on_ready():
 
 client.loop.create_task(dxheat_task())
 client.run(DISCORD_TOKEN)
+
