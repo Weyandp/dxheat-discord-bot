@@ -1,7 +1,9 @@
 import os
-import socket
 import discord
 import asyncio
+import aiohttp
+from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
@@ -14,34 +16,86 @@ if not DISCORD_CHANNEL_ID:
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
 client = discord.Client(intents=discord.Intents.default())
 
-async def dx_listener():
+last_spots = set()  # Zum Duplikatenschutz
+
+async def fetch_dx_spots():
+    url = "https://dxheat.com/dxc/"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                print(f"Fehler beim Abruf: HTTP {resp.status}")
+                return []
+            text = await resp.text()
+            soup = BeautifulSoup(text, "html.parser")
+
+            spots = []
+            # dxheat benutzt Tabelle mit id="dxheat_spots_table"
+            table = soup.find("table", id="dxheat_spots_table")
+            if not table:
+                print("Tabelle mit DX-Spots nicht gefunden.")
+                return []
+
+            rows = table.find_all("tr")[1:]  # Erste Zeile ist Header
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) < 7:
+                    continue
+                freq = cols[0].text.strip()
+                mode = cols[1].text.strip()
+                call = cols[2].text.strip()
+                spotter = cols[3].text.strip()
+                time_str = cols[5].text.strip()
+
+                spots.append({
+                    "freq": freq,
+                    "mode": mode,
+                    "call": call,
+                    "spotter": spotter,
+                    "time": time_str
+                })
+            return spots
+
+async def dxheat_loop():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
-
     if channel is None:
-        print("❌ Discord-Kanal nicht gefunden.")
+        print("Discord-Channel nicht gefunden!")
         return
 
-    s = socket.socket()
-    s.connect(("cluster.dxde.net", 8000))
-    s.send(b"NOBODY\n")  # login / ident
-    print("✅ Verbunden mit DX Cluster.")
+    global last_spots
 
     while True:
-        try:
-            data = s.recv(4096).decode("utf-8", errors="ignore")
-            lines = data.strip().split("\n")
-            for line in lines:
-                print(f"RECV: {line.strip()}")  # ALLES anzeigen
-                if "DX de" in line:
-                    await channel.send(f"📡 `{line.strip()}`")
-        except Exception as e:
-            print(f"Fehler: {e}")
-            await asyncio.sleep(5)
+        spots = await fetch_dx_spots()
+        if not spots:
+            print("Keine Spots gefunden oder Abruf fehlgeschlagen.")
+            await asyncio.sleep(30)
+            continue
+
+        new_spots = []
+        for spot in spots:
+            identifier = f"{spot['freq']}-{spot['call']}-{spot['time']}"
+            if identifier not in last_spots:
+                new_spots.append(spot)
+                last_spots.add(identifier)
+
+        for spot in new_spots:
+            message = (
+                f"📡 **{spot['freq']}** | {spot['mode']}\n"
+                f"📞 {spot['call']} → {spot['spotter']}\n"
+                f"⏰ {spot['time']}"
+            )
+            await channel.send(message)
+
+        # Speichere nur die letzten 100 Spots, um Speicher zu sparen
+        if len(last_spots) > 100:
+            last_spots = set(list(last_spots)[-100:])
+
+        await asyncio.sleep(30)  # alle 30 Sekunden abrufen
 
 @client.event
 async def on_ready():
-    print(f"✅ Discord-Bot läuft als {client.user}")
-    client.loop.create_task(dx_listener())
+    print(f"Bot läuft als {client.user}")
+    client.loop.create_task(dxheat_loop())
 
 client.run(DISCORD_TOKEN)
+
