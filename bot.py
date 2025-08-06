@@ -2,73 +2,50 @@ import os
 import discord
 import asyncio
 import aiohttp
-import csv
-from io import StringIO
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
+API_URL = "https://web.cluster.iz3mez.it/spots.json/"
 
-if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN ist nicht gesetzt!")
-if not DISCORD_CHANNEL_ID:
-    raise ValueError("DISCORD_CHANNEL_ID ist nicht gesetzt!")
+if not DISCORD_TOKEN or not DISCORD_CHANNEL_ID:
+    raise ValueError("Token oder Channel-ID nicht gesetzt!")
 
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
-intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+client = discord.Client(intents=discord.Intents.default())
 
-async def fetch_dxspots():
-    # Beispiel-URL für CSV-Daten von DXSummit, hier mit Limit 5 (maximale Spots)
-    url = "https://www.dxsummit.fi/api/v1/spots?limit=5&content_type=csv&as_file=true"
-
+async def fetch_spots():
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
+        async with session.get(API_URL) as resp:
             if resp.status != 200:
-                print(f"Fehler beim Abruf: HTTP {resp.status}")
+                print("API Fehler:", resp.status)
                 return []
+            data = await resp.json()
+            return data[:5]  # nur die letzten 5 Spots
 
-            text = await resp.text()
-            csvfile = StringIO(text)
-            reader = csv.DictReader(csvfile)
-            spots = [row for row in reader]
-            return spots
-
-async def dxsummit_loop():
+async def spot_loop():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
     if channel is None:
-        print("Discord-Channel nicht gefunden!")
+        print("Kanal nicht gefunden!")
         return
 
     while True:
-        spots = await fetch_dxspots()
-        if not spots:
-            print("Keine Spots gefunden oder Abruf fehlgeschlagen.")
-            await asyncio.sleep(30)
-            continue
-
-        for spot in spots:
-            # Beispiel-Spalten (kann je nach CSV-Format variieren)
-            # Typische Felder: spotter, frequency, mode, callsign, time
-            callsign = spot.get("call", "N/A")
-            frequency = spot.get("freq", "N/A")
-            mode = spot.get("mode", "N/A")
-            spotter = spot.get("spotter", "N/A")
-            time = spot.get("time", "N/A")
-
-            embed = discord.Embed(title=f"DX Spot: {callsign}", color=0x1abc9c)
-            embed.add_field(name="Frequency", value=frequency, inline=True)
-            embed.add_field(name="Mode", value=mode, inline=True)
-            embed.add_field(name="Spotter", value=spotter, inline=True)
-            embed.add_field(name="Time", value=time, inline=True)
-
-            await channel.send(embed=embed)
-
-        await asyncio.sleep(30)  # Alle 30 Sekunden neu abrufen
+        spots = await fetch_spots()
+        if spots:
+            for spot in spots:
+                embed = discord.Embed(title=f"DX Spot: {spot['spotted']}", color=0x007acc)
+                embed.add_field(name="Frequenz", value=spot["frequency"], inline=True)
+                embed.add_field(name="Band", value=spot.get("band", ""), inline=True)
+                embed.add_field(name="Spotter", value=spot["spotter"], inline=True)
+                embed.add_field(name="Zeit (UTC)", value=spot["spot_datetime_utc"], inline=False)
+                await channel.send(embed=embed)
+        else:
+            print("Keine Spots oder API nicht erreichbar.")
+        await asyncio.sleep(30)  # alle 30 Sekunden prüfen
 
 @client.event
 async def on_ready():
-    print(f"Bot läuft als {client.user}")
-    client.loop.create_task(dxsummit_loop())
+    print(f"✅ Bot läuft als {client.user}")
+    client.loop.create_task(spot_loop())
 
 client.run(DISCORD_TOKEN)
