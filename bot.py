@@ -13,9 +13,10 @@ if not DISCORD_CHANNEL_ID:
     raise ValueError("DISCORD_CHANNEL_ID ist nicht gesetzt!")
 
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
-client = discord.Client(intents=discord.Intents.default())
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
 
-last_spots = set()  # Zum Duplikatsschutz
+last_spots = set()  # Für Duplikatsschutz
 
 async def fetch_dx_spots():
     url = "https://www.qrz.com/dxcluster"
@@ -80,18 +81,18 @@ async def dxheat_loop():
                 last_spots.add(identifier)
 
         for spot in new_spots:
-            message = (
-                f"📡 **{spot['frequency']}** | {spot['mode']}\n"
-                f"📞 {spot['callsign']} → {spot['spotter']}\n"
-                f"⏰ {spot['time']}"
-            )
-            await channel.send(message)
+            embed = discord.Embed(title=f"DX Spot: {spot['callsign']}", color=0x1abc9c)
+            embed.add_field(name="Frequency", value=spot['frequency'], inline=True)
+            embed.add_field(name="Mode", value=spot['mode'], inline=True)
+            embed.add_field(name="Spotter", value=spot['spotter'], inline=True)
+            embed.add_field(name="Time", value=spot['time'], inline=True)
+            await channel.send(embed=embed)
 
-        # Speichere nur die letzten 100 Spots, um Speicher zu sparen
+        # Nur die letzten 100 Spots speichern, um Speicher zu begrenzen
         if len(last_spots) > 100:
             last_spots = set(list(last_spots)[-100:])
 
-        await asyncio.sleep(30)  # alle 30 Sekunden abrufen
+        await asyncio.sleep(30)  # Alle 30 Sekunden neue Spots abrufen
 
 @client.event
 async def on_ready():
@@ -99,3 +100,4 @@ async def on_ready():
     client.loop.create_task(dxheat_loop())
 
 client.run(DISCORD_TOKEN)
+
