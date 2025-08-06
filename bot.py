@@ -15,7 +15,7 @@ if not DISCORD_CHANNEL_ID:
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
 client = discord.Client(intents=discord.Intents.default())
 
-last_spots = set()  # Zum Duplikatsschutz
+last_spots = set()  # Für Duplikatsschutz
 
 async def fetch_dx_spots():
     url = "https://dxheat.com/dxc/"
@@ -27,28 +27,31 @@ async def fetch_dx_spots():
             text = await resp.text()
             soup = BeautifulSoup(text, "html.parser")
 
-            spots = []
-            spot_divs = soup.find_all("div", class_="dxspot")
-            if not spot_divs:
-                print("Keine DX-Spots gefunden auf der Seite.")
+            table = soup.find("table")
+            if not table:
+                print("Keine Tabelle mit DX-Spots gefunden.")
                 return []
 
-            for div in spot_divs:
-                freq = div.find("span", class_="freq")
-                mode = div.find("span", class_="mode")
-                call = div.find("span", class_="call")
-                spotter = div.find("span", class_="spotter")
-                time_str = div.find("span", class_="time")
+            spots = []
+            rows = table.find_all("tr")[1:]  # Header überspringen
 
-                if not (freq and mode and call and spotter and time_str):
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) < 5:
                     continue
 
+                freq = cols[0].text.strip()
+                mode = cols[1].text.strip()
+                call = cols[2].text.strip()
+                spotter = cols[3].text.strip()
+                time_str = cols[4].text.strip()
+
                 spots.append({
-                    "freq": freq.text.strip(),
-                    "mode": mode.text.strip(),
-                    "call": call.text.strip(),
-                    "spotter": spotter.text.strip(),
-                    "time": time_str.text.strip()
+                    "freq": freq,
+                    "mode": mode,
+                    "call": call,
+                    "spotter": spotter,
+                    "time": time_str
                 })
 
             return spots
@@ -84,19 +87,16 @@ async def dxheat_loop():
             )
             await channel.send(message)
 
-        # Speichere nur die letzten 100 Spots, um Speicher zu sparen
+        # Behalte nur die letzten 100 Spots für Speicheroptimierung
         if len(last_spots) > 100:
             last_spots = set(list(last_spots)[-100:])
 
-        await asyncio.sleep(30)  # alle 30 Sekunden abrufen
+        await asyncio.sleep(30)
 
 @client.event
 async def on_ready():
     print(f"Bot läuft als {client.user}")
     client.loop.create_task(dxheat_loop())
-
-client.run(DISCORD_TOKEN)
-
 
 client.run(DISCORD_TOKEN)
 
