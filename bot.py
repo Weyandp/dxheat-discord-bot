@@ -15,7 +15,7 @@ if not CHANNEL_ID:
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-# Beispiel-API mit DX-Spots (anpassen falls nötig)
+# API URL (anpassen, falls du eine andere Quelle nutzt)
 API_URL = "https://web.cluster.iz3mez.it/spots.json"
 
 SPOT_LIMIT = 5
@@ -38,8 +38,9 @@ async def on_ready():
                         await asyncio.sleep(POST_INTERVAL)
                         continue
 
-                    data = await resp.json()
-                    spots = data.get("spots", [])
+                    # Hier: JSON ist direkt eine Liste
+                    spots = await resp.json()
+
                     if not spots:
                         print("Keine Spots gefunden.")
                         await asyncio.sleep(POST_INTERVAL)
