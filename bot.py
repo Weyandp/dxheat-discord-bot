@@ -15,10 +15,10 @@ if not DISCORD_CHANNEL_ID:
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
 client = discord.Client(intents=discord.Intents.default())
 
-last_spots = set()  # Für Duplikatsschutz
+last_spots = set()  # Zum Duplikatsschutz
 
 async def fetch_dx_spots():
-    url = "https://dxheat.com/dxc/"
+    url = "https://www.qrz.com/dxcluster"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
@@ -40,18 +40,18 @@ async def fetch_dx_spots():
                 if len(cols) < 5:
                     continue
 
-                freq = cols[0].text.strip()
-                mode = cols[1].text.strip()
-                call = cols[2].text.strip()
-                spotter = cols[3].text.strip()
-                time_str = cols[4].text.strip()
+                spotter = cols[0].text.strip()
+                frequency = cols[1].text.strip()
+                mode = cols[2].text.strip()
+                callsign = cols[3].text.strip()
+                time = cols[4].text.strip()
 
                 spots.append({
-                    "freq": freq,
-                    "mode": mode,
-                    "call": call,
                     "spotter": spotter,
-                    "time": time_str
+                    "frequency": frequency,
+                    "mode": mode,
+                    "callsign": callsign,
+                    "time": time
                 })
 
             return spots
@@ -74,24 +74,24 @@ async def dxheat_loop():
 
         new_spots = []
         for spot in spots:
-            identifier = f"{spot['freq']}-{spot['call']}-{spot['time']}"
+            identifier = f"{spot['frequency']}-{spot['callsign']}-{spot['time']}"
             if identifier not in last_spots:
                 new_spots.append(spot)
                 last_spots.add(identifier)
 
         for spot in new_spots:
             message = (
-                f"📡 **{spot['freq']}** | {spot['mode']}\n"
-                f"📞 {spot['call']} → {spot['spotter']}\n"
+                f"📡 **{spot['frequency']}** | {spot['mode']}\n"
+                f"📞 {spot['callsign']} → {spot['spotter']}\n"
                 f"⏰ {spot['time']}"
             )
             await channel.send(message)
 
-        # Behalte nur die letzten 100 Spots für Speicheroptimierung
+        # Speichere nur die letzten 100 Spots, um Speicher zu sparen
         if len(last_spots) > 100:
             last_spots = set(list(last_spots)[-100:])
 
-        await asyncio.sleep(30)
+        await asyncio.sleep(30)  # alle 30 Sekunden abrufen
 
 @client.event
 async def on_ready():
@@ -99,4 +99,3 @@ async def on_ready():
     client.loop.create_task(dxheat_loop())
 
 client.run(DISCORD_TOKEN)
-
