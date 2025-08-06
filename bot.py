@@ -33,11 +33,14 @@ async def spot_loop():
         spots = await fetch_spots()
         if spots:
             for spot in spots:
-                embed = discord.Embed(title=f"DX Spot: {spot['spotted']}", color=0x007acc)
-                embed.add_field(name="Frequenz", value=spot["frequency"], inline=True)
-                embed.add_field(name="Band", value=spot.get("band", ""), inline=True)
-                embed.add_field(name="Spotter", value=spot["spotter"], inline=True)
-                embed.add_field(name="Zeit (UTC)", value=spot["spot_datetime_utc"], inline=False)
+                embed = discord.Embed(
+                    title=f"DX Spot: {spot.get('spotted', 'unbekannt')}",
+                    color=0x007acc
+                )
+                embed.add_field(name="Frequenz", value=spot.get("frequency", "unbekannt"), inline=True)
+                embed.add_field(name="Band", value=spot.get("band", "unbekannt"), inline=True)
+                embed.add_field(name="Spotter", value=spot.get("spotter", "unbekannt"), inline=True)
+                embed.add_field(name="Zeit (UTC)", value=spot.get("timestamp", "unbekannt"), inline=False)
                 await channel.send(embed=embed)
         else:
             print("Keine Spots oder API nicht erreichbar.")
