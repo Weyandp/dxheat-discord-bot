@@ -24,8 +24,7 @@ async def dx_listener():
 
     s = socket.socket()
     s.connect(("cluster.dxde.net", 8000))
-    s.send(b"\n")  # Login (leer lassen)
-
+    s.send(b"NOBODY\n")  # login / ident
     print("✅ Verbunden mit DX Cluster.")
 
     while True:
@@ -33,6 +32,7 @@ async def dx_listener():
             data = s.recv(4096).decode("utf-8", errors="ignore")
             lines = data.strip().split("\n")
             for line in lines:
+                print(f"RECV: {line.strip()}")  # ALLES anzeigen
                 if "DX de" in line:
                     await channel.send(f"📡 `{line.strip()}`")
         except Exception as e:
