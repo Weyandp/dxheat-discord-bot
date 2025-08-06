@@ -3,7 +3,6 @@ import discord
 import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
-from datetime import datetime, timezone
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
@@ -16,7 +15,7 @@ if not DISCORD_CHANNEL_ID:
 CHANNEL_ID = int(DISCORD_CHANNEL_ID)
 client = discord.Client(intents=discord.Intents.default())
 
-last_spots = set()  # Zum Duplikatenschutz
+last_spots = set()  # Zum Duplikatsschutz
 
 async def fetch_dx_spots():
     url = "https://dxheat.com/dxc/"
@@ -29,30 +28,29 @@ async def fetch_dx_spots():
             soup = BeautifulSoup(text, "html.parser")
 
             spots = []
-            # dxheat benutzt Tabelle mit id="dxheat_spots_table"
-            table = soup.find("table", id="dxheat_spots_table")
-            if not table:
-                print("Tabelle mit DX-Spots nicht gefunden.")
+            spot_divs = soup.find_all("div", class_="dxspot")
+            if not spot_divs:
+                print("Keine DX-Spots gefunden auf der Seite.")
                 return []
 
-            rows = table.find_all("tr")[1:]  # Erste Zeile ist Header
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) < 7:
+            for div in spot_divs:
+                freq = div.find("span", class_="freq")
+                mode = div.find("span", class_="mode")
+                call = div.find("span", class_="call")
+                spotter = div.find("span", class_="spotter")
+                time_str = div.find("span", class_="time")
+
+                if not (freq and mode and call and spotter and time_str):
                     continue
-                freq = cols[0].text.strip()
-                mode = cols[1].text.strip()
-                call = cols[2].text.strip()
-                spotter = cols[3].text.strip()
-                time_str = cols[5].text.strip()
 
                 spots.append({
-                    "freq": freq,
-                    "mode": mode,
-                    "call": call,
-                    "spotter": spotter,
-                    "time": time_str
+                    "freq": freq.text.strip(),
+                    "mode": mode.text.strip(),
+                    "call": call.text.strip(),
+                    "spotter": spotter.text.strip(),
+                    "time": time_str.text.strip()
                 })
+
             return spots
 
 async def dxheat_loop():
@@ -96,6 +94,9 @@ async def dxheat_loop():
 async def on_ready():
     print(f"Bot läuft als {client.user}")
     client.loop.create_task(dxheat_loop())
+
+client.run(DISCORD_TOKEN)
+
 
 client.run(DISCORD_TOKEN)
 
