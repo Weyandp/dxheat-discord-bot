@@ -1,22 +1,15 @@
 import os
 import discord
-import asyncio
 import aiohttp
+import asyncio
 from datetime import datetime
 import pytz
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
-API_URL = "https://web.cluster.iz3mez.it/spots.json/"
+CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 
-if not DISCORD_TOKEN or not DISCORD_CHANNEL_ID:
-    raise ValueError("DISCORD_TOKEN oder DISCORD_CHANNEL_ID ist nicht gesetzt!")
-
-CHANNEL_ID = int(DISCORD_CHANNEL_ID)
-client = discord.Client(intents=discord.Intents.default())
-
-# Umwandlung von UTC nach deutscher Zeit (automatisch Sommer-/Winterzeit)
-def utc_to_german(utc_time_str):
+# Zeitumwandlung: UTC -> Europe/Berlin (MEZ/MESZ)
+def utc_to_german(utc_time_str: str) -> str:
     try:
         utc = pytz.utc
         german_tz = pytz.timezone("Europe/Berlin")
@@ -24,57 +17,68 @@ def utc_to_german(utc_time_str):
         utc_dt = utc.localize(utc_dt)
         german_dt = utc_dt.astimezone(german_tz)
         return german_dt.strftime("%d.%m.%Y %H:%M:%S")
-    except Exception:
+    except Exception as e:
+        print(f"Fehler bei Zeitumwandlung: {e}")
         return "Zeit unbekannt"
 
-async def fetch_spots():
-    async with aiohttp.ClientSession() as session:
-        async with session.get(API_URL) as resp:
-            if resp.status != 200:
-                print("API-Fehler:", resp.status)
-                return []
-            data = await resp.json()
-            return data[:5]  # Nur die letzten 5 Spots
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
 
-async def spot_loop():
-    await client.wait_until_ready()
-    channel = client.get_channel(CHANNEL_ID)
-    if channel is None:
-        print("❌ Discord-Kanal nicht gefunden!")
-        return
-
-    while True:
-        spots = await fetch_spots()
-        if not spots:
-            print("⚠️ Keine Spots oder API nicht erreichbar.")
-        else:
-            for spot in spots:
-                rufzeichen = spot.get("spotted", "Unbekannt")
-                frequenz = spot.get("frequency", "Unbekannt")
-                band = spot.get("band", "Unbekannt")
-                spotter = spot.get("spotter", "Unbekannt")
-                utc_zeit = spot.get("spot_datetime_utc") or spot.get("spot_time") or "Unbekannt"
-                deutsche_zeit = utc_to_german(utc_zeit) if "Unbekannt" not in utc_zeit else "Zeit unbekannt"
-
-                embed = discord.Embed(
-                    title="📡 Neuer DX-Spot",
-                    description="Ein neuer DX-Spot wurde gemeldet:",
-                    color=0x3498db
-                )
-                embed.add_field(name="Rufzeichen", value=rufzeichen, inline=True)
-                embed.add_field(name="Frequenz", value=frequenz, inline=True)
-                embed.add_field(name="Band", value=band, inline=True)
-                embed.add_field(name="Gesichtet von", value=spotter, inline=True)
-                embed.add_field(name="Zeit (Deutschland)", value=deutsche_zeit, inline=False)
-                embed.set_footer(text="Powered by Patrick Weyand • Daten via IZ3MEZ Cluster")
-
-                await channel.send(embed=embed)
-
-        await asyncio.sleep(30)
+API_URL = "https://web.cluster.iz3mez.it/spots.json"  # Beispiel API-URL (anpassen, falls nötig)
+SPOT_LIMIT = 5
+POST_INTERVAL = 30  # Sekunden
 
 @client.event
 async def on_ready():
-    print(f"✅ Bot läuft als {client.user}")
-    client.loop.create_task(spot_loop())
+    print(f"Bot läuft als {client.user}")
+    channel = client.get_channel(CHANNEL_ID)
+    if channel is None:
+        print("Kanal nicht gefunden!")
+        return
+
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(API_URL) as resp:
+                    if resp.status != 200:
+                        print(f"Fehler beim Abruf der Spots: HTTP {resp.status}")
+                        await asyncio.sleep(POST_INTERVAL)
+                        continue
+
+                    data = await resp.json()
+
+                    spots = data.get("spots", [])
+                    if not spots:
+                        print("Keine Spots gefunden.")
+                        await asyncio.sleep(POST_INTERVAL)
+                        continue
+
+                    # Nur die letzten SPOT_LIMIT Spots
+                    for spot in spots[:SPOT_LIMIT]:
+                        call = spot.get("call", "Unbekannt")
+                        freq = spot.get("freq", "Unbekannt")
+                        band = spot.get("band", "Unbekannt")
+                        spotter = spot.get("spotter", "Unbekannt")
+                        utc_time = spot.get("spot_datetime_utc") or spot.get("time") or None
+
+                        if utc_time is None:
+                            zeit = "Zeit unbekannt"
+                        else:
+                            zeit = utc_to_german(utc_time)
+
+                        embed = discord.Embed(title=f"DX Spot: {call}", color=0x1E90FF)
+                        embed.add_field(name="Frequenz", value=f"{freq} kHz", inline=True)
+                        embed.add_field(name="Band", value=band, inline=True)
+                        embed.add_field(name="Spotter", value=spotter, inline=True)
+                        embed.add_field(name="Zeit (MEZ/MESZ)", value=zeit, inline=False)
+                        embed.set_footer(text="Powered by Patrick Weyand")
+
+                        await channel.send(embed=embed)
+
+                await asyncio.sleep(POST_INTERVAL)
+
+            except Exception as e:
+                print(f"Fehler in der Hauptschleife: {e}")
+                await asyncio.sleep(POST_INTERVAL)
 
 client.run(DISCORD_TOKEN)
