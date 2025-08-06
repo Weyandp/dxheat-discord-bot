@@ -1,75 +1,54 @@
 import os
 import discord
-import aiohttp
 import asyncio
+import aiohttp
 
-# Discord Token und Channel ID als Umgebungsvariablen
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
+API_URL = "https://web.cluster.iz3mez.it/spots.json/"
 
-if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN ist nicht gesetzt!")
-if not CHANNEL_ID:
-    raise ValueError("DISCORD_CHANNEL_ID ist nicht gesetzt!")
+if not DISCORD_TOKEN or not DISCORD_CHANNEL_ID:
+    raise ValueError("Token oder Channel-ID nicht gesetzt!")
 
-intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+CHANNEL_ID = int(DISCORD_CHANNEL_ID)
+client = discord.Client(intents=discord.Intents.default())
 
-# API URL (anpassen, falls du eine andere Quelle nutzt)
-API_URL = "https://web.cluster.iz3mez.it/spots.json"
+async def fetch_spots():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(API_URL) as resp:
+            if resp.status != 200:
+                print("API Fehler:", resp.status)
+                return []
+            data = await resp.json()
+            return data[:5]  # nur die letzten 5 Spots
 
-SPOT_LIMIT = 5
-POST_INTERVAL = 30  # Sekunden
+async def spot_loop():
+    await client.wait_until_ready()
+    channel = client.get_channel(CHANNEL_ID)
+    if channel is None:
+        print("Kanal nicht gefunden!")
+        return
+
+    while True:
+        spots = await fetch_spots()
+        if spots:
+            for spot in spots:
+                embed = discord.Embed(
+                    title=f"DX Spot: {spot.get('spotted', 'unbekannt')}",
+                    color=0x007acc
+                )
+                embed.add_field(name="Frequenz", value=spot.get("frequency", "unbekannt"), inline=True)
+                embed.add_field(name="Band", value=spot.get("band", "unbekannt"), inline=True)
+                embed.add_field(name="Spotter", value=spot.get("spotter", "unbekannt"), inline=True)
+                embed.add_field(name="Zeit (UTC)", value=spot.get("timestamp", "unbekannt"), inline=False)
+                await channel.send(embed=embed)
+        else:
+            print("Keine Spots oder API nicht erreichbar.")
+        await asyncio.sleep(30)  # alle 30 Sekunden prüfen
 
 @client.event
 async def on_ready():
-    print(f"Bot läuft als {client.user}")
-    channel = client.get_channel(CHANNEL_ID)
-    if not channel:
-        print("Discord-Kanal nicht gefunden!")
-        return
-
-    async with aiohttp.ClientSession() as session:
-        while True:
-            try:
-                async with session.get(API_URL) as resp:
-                    if resp.status != 200:
-                        print(f"Fehler beim Abruf der Spots: HTTP {resp.status}")
-                        await asyncio.sleep(POST_INTERVAL)
-                        continue
-
-                    # Hier: JSON ist direkt eine Liste
-                    spots = await resp.json()
-
-                    if not spots:
-                        print("Keine Spots gefunden.")
-                        await asyncio.sleep(POST_INTERVAL)
-                        continue
-
-                    for spot in spots[:SPOT_LIMIT]:
-                        call = spot.get("call", "Unbekannt")
-                        freq = spot.get("freq", "Unbekannt")
-                        band = spot.get("band", "Unbekannt")
-                        spotter = spot.get("spotter", "Unbekannt")
-                        spot_country = spot.get("spot_country", "Unbekannt")
-                        spotter_country = spot.get("spotter_country", "Unbekannt")
-                        utc_time = spot.get("spot_datetime_utc") or spot.get("time") or "Zeit unbekannt"
-
-                        embed = discord.Embed(title=f"DX Spot: {call}", color=0x1E90FF)
-                        embed.add_field(name="Frequenz", value=f"{freq} kHz", inline=True)
-                        embed.add_field(name="Band", value=band, inline=True)
-                        embed.add_field(name="Land (Spot)", value=spot_country, inline=True)
-                        embed.add_field(name="Land (Spotter)", value=spotter_country, inline=True)
-                        embed.add_field(name="Spotter", value=spotter, inline=True)
-                        embed.add_field(name="Zeit (UTC)", value=utc_time, inline=False)
-                        embed.set_footer(text="Powered by Patrick Weyand")
-
-                        await channel.send(embed=embed)
-
-                await asyncio.sleep(POST_INTERVAL)
-
-            except Exception as e:
-                print(f"Fehler in der Hauptschleife: {e}")
-                await asyncio.sleep(POST_INTERVAL)
+    print(f"✅ Bot läuft als {client.user}")
+    client.loop.create_task(spot_loop())
 
 client.run(DISCORD_TOKEN)
