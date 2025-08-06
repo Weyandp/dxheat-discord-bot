@@ -1,6 +1,10 @@
 import os
-print(f"DISCORD_TOKEN (raw): {os.getenv('DISCORD_TOKEN')}")
-print(f"DISCORD_CHANNEL_ID (raw): {os.getenv('DISCORD_CHANNEL_ID')}")
+
+print("Alle Umgebungsvariablen:")
+for k, v in os.environ.items():
+    print(f"{k}={v}")
+
+exit()
 
 import os
 import discord
