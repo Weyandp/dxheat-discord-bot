@@ -1,4 +1,8 @@
 import os
+print(f"DISCORD_TOKEN (raw): {os.getenv('DISCORD_TOKEN')}")
+print(f"DISCORD_CHANNEL_ID (raw): {os.getenv('DISCORD_CHANNEL_ID')}")
+
+import os
 import discord
 import asyncio
 import requests
