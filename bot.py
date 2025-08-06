@@ -1,12 +1,4 @@
 import os
-
-print("Alle Umgebungsvariablen:")
-for k, v in os.environ.items():
-    print(f"{k}={v}")
-
-exit()
-
-import os
 import discord
 import asyncio
 import requests
